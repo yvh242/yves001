@@ -7,83 +7,89 @@ import os
 # --- PDF GENERATOR KLASSE ---
 class RecipePDF(FPDF):
     def header(self):
-        self.set_font("Arial", 'B', 15)
-        self.cell(0, 10, "", ln=True, align='C')
-        self.ln(5)
+        # Optionele header, nu leeg gelaten voor een cleaner design
+        pass
 
 # --- APP LAYOUT ---
-st.set_page_config(page_title="Recept naar PDF Maker", layout="wide")
+st.set_page_config(page_title="Recept naar PDF Maker", layout="centered")
 st.title("🍳 Recept naar PDF Generator")
 
-# Kolommen voor input
-col1, col2 = st.columns([1, 1])
+st.subheader("1. Voer je recept in")
+
+# Inputvelden
+titel_input = st.text_input("Titel van het recept", "Heerlijke Pasta")
+ingr_input = st.text_area("Ingrediënten (één per regel)", "500g Pasta\n2 teentjes knoflook\nOlijfolie", height=150)
+bereiding_input = st.text_area("Bereidingswijze", "Kook de pasta al dente en meng met de overige ingrediënten.", height=200)
+
+st.divider()
+
+# Foto en Instellingen
+st.subheader("2. Foto & Tekst Instellingen")
+uploaded_file = st.file_uploader("Voeg een foto toe (optioneel)", type=["jpg", "jpeg", "png"])
+
+col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("1. Voer de gegevens in")
-    titel_input = st.text_input("Titel van het recept", "Heerlijke Pasta")
-    ingr_input = st.text_area("Ingrediënten (één per regel)", "500g Pasta\n2 teentjes knoflook\nOlijfolie")
-    bereiding_input = st.text_area("Bereidingswijze", "Kook de pasta al dente...")
-    
-    uploaded_file = st.file_uploader("Voeg een foto toe (optioneel)", type=["jpg", "jpeg", "png"])
-    
-    if uploaded_file:
-        st.subheader("📷 Foto Instellingen")
-        img_width = st.slider("Breedte foto (mm)", 10, 100, 50)
-        img_height = st.slider("Hoogte foto (mm)", 10, 100, 50)
+    st.markdown("### 📏 Foto Afmetingen")
+    img_width = st.slider("Breedte foto (mm)", 10, 150, 60)
+    img_height = st.slider("Hoogte foto (mm)", 10, 150, 60)
 
 with col2:
-    st.subheader("2. Controleer & Pas aan")
-    # Bewerkbare tekstvelden voor de eindstructuur
-    final_titel = st.text_input("Titel aanpassen", titel_input)
-    final_ingr = st.text_area("Ingrediënten aanpassen", ingr_input, height=150)
-    final_bereiding = st.text_area("Bereidingswijze aanpassen", bereiding_input, height=150)
+    st.markdown("### ✍️ Tekstgrootte")
+    size_titel = st.slider("Grootte Titel", 12, 40, 24)
+    size_body = st.slider("Grootte Inhoud", 8, 20, 11)
 
 # --- PDF GENERATIE LOGICA ---
-if st.button("Genereer PDF"):
+if st.button("Genereer en Download PDF"):
     pdf = RecipePDF()
     pdf.add_page()
     
-    # Titel
-    pdf.set_font("Arial", 'B', 20)
-    pdf.cell(0, 10, final_titel, ln=True)
-    pdf.ln(10)
+    # Gebruik een standaard font dat UTF-8 tekens redelijk aankan
+    pdf.set_font("Arial", 'B', size_titel)
     
-    # Startpunt voor Ingrediënten
+    # Titel
+    pdf.cell(0, 15, titel_input, ln=True)
+    pdf.ln(5)
+    
+    # Startpositie voor ingrediënten en foto
     start_y = pdf.get_y()
     
     # Ingrediënten (Links)
-    pdf.set_font("Arial", 'B', 12)
+    pdf.set_font("Arial", 'B', size_body + 2)
     pdf.cell(100, 10, "Ingrediënten:", ln=True)
-    pdf.set_font("Arial", '', 11)
-    for line in final_ingr.split('\n'):
-        pdf.cell(100, 6, f"- {line}", ln=True)
+    pdf.set_font("Arial", '', size_body)
     
-    # Foto (Rechts van de ingrediënten)
+    # We schrijven de ingrediënten regel voor regel
+    for line in ingr_input.split('\n'):
+        if line.strip():
+            pdf.cell(100, 6, f"- {line.strip()}", ln=True)
+    
+    # Foto (Rechts van de ingrediënten plaatsen)
     if uploaded_file:
-        # Sla foto tijdelijk op voor de PDF
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
             img = Image.open(uploaded_file)
             img.save(tmp_file.name)
-            # Plaats foto rechts (x=120) op de hoogte van de ingrediënten
-            pdf.image(tmp_file.name, x=120, y=start_y, w=img_width, h=img_height)
-            os.unlink(tmp_file.name) # Verwijder tijdelijk bestand
+            # x=120 plaatst de foto aan de rechterkant van de A4
+            pdf.image(tmp_file.name, x=110, y=start_y, w=img_width, h=img_height)
+            os.unlink(tmp_file.name)
 
-    # Bereidingswijze (Onder de ingrediënten/foto)
-    # Bepaal de nieuwe Y positie zodat tekst niet over foto heen gaat
-    current_y = max(pdf.get_y(), start_y + (img_height if uploaded_file else 0))
-    pdf.set_y(current_y + 10)
+    # Bereidingswijze (Altijd onder de ingrediënten OF onder de foto, wat het laagst is)
+    current_y = pdf.get_y()
+    photo_bottom_y = start_y + img_height if uploaded_file else 0
+    new_y = max(current_y, photo_bottom_y) + 10
     
-    pdf.set_font("Arial", 'B', 12)
+    pdf.set_y(new_y)
+    pdf.set_font("Arial", 'B', size_body + 2)
     pdf.cell(0, 10, "Bereidingswijze:", ln=True)
-    pdf.set_font("Arial", '', 11)
-    pdf.multi_cell(0, 6, final_bereiding)
+    pdf.set_font("Arial", '', size_body)
+    pdf.multi_cell(0, 6, bereiding_input)
     
-    # PDF Output
+    # PDF Output naar Streamlit
     pdf_output = pdf.output()
+    
     st.download_button(
-        label="Download Recept PDF",
+        label="Download PDF Bestand",
         data=bytes(pdf_output),
-        file_name=f"{final_titel.replace(' ', '_')}.pdf",
+        file_name=f"{titel_input.replace(' ', '_')}.pdf",
         mime="application/pdf"
     )
-    st.success("PDF is klaar om te downloaden!")
