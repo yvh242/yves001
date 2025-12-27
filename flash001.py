@@ -74,7 +74,7 @@ if df is not None:
             background-color: #f9f9f9;
             margin-bottom: 20px;">
             <h2 style="color: #333;">Wat is de hoofdstad van:</h2>
-            <h1 style="color: #1E88E5;">{row['CountryName']}?</h1>
+            <h1 style="color: #1E88E5;">{row['Country']}?</h1>
         </div>
     """, unsafe_allow_html=True)
 
@@ -100,7 +100,7 @@ if df is not None:
                 border-radius: 10px;
                 border: 1px dashed #1E88E5;">
                 <h3 style="margin:0;">Het antwoord is:</h3>
-                <h1 style="color: #D32F2F; margin:0;">{row['CapitalName']}</h1>
+                <h1 style="color: #D32F2F; margin:0;">{row['Capital']}</h1>
             </div>
         """, unsafe_allow_html=True)
         st.balloons()
