@@ -122,8 +122,10 @@ else:
         st.pydeck_chart(pdk.Deck(
             layers=[layer],
             initial_view_state=view_state,
-            map_style="mapbox://styles/mapbox/light-v9"
-        ))
+            # Gebruik 'road' of 'satellite' (zonder de mapbox:// prefix) 
+            # of laat het weg voor de standaard CartoDB stijl
+            map_style=None 
+        ))  
 
     with col_quiz:
         st.subheader(f"Wat is de hoofdstad van:")
