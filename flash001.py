@@ -13,21 +13,25 @@ def load_data():
         if not files: return None
         
         df = pd.read_csv(os.path.join(path, files[0]))
-        # Mapping voor verschillende mogelijke kolomnamen
-        df = df.rename(columns={'CountryName': 'Country', 'CapitalName': 'Capital', 
-                                'country': 'Country', 'capital': 'Capital'})
-        return df[['Country', 'Capital']].dropna().reset_index(drop=True)
+        # Mapping voor kolommen
+        mapping = {
+            'CountryName': 'Country', 
+            'CapitalName': 'Capital', 
+            'ContinentName': 'Continent'
+        }
+        df = df.rename(columns=mapping)
+        return df[['Country', 'Capital', 'Continent']].dropna().reset_index(drop=True)
     except Exception as e:
         st.error(f"Fout bij laden: {e}")
         return None
 
-df = load_data()
+df_full = load_data()
 
 # --- SESSIE BEHEER ---
 if 'score' not in st.session_state:
     st.session_state.score = 0
 if 'current_idx' not in st.session_state:
-    st.session_state.current_idx = random.randint(0, len(df) - 1)
+    st.session_state.current_idx = None
 if 'attempts' not in st.session_state:
     st.session_state.attempts = 0
 if 'options' not in st.session_state:
@@ -35,63 +39,82 @@ if 'options' not in st.session_state:
 if 'feedback' not in st.session_state:
     st.session_state.feedback = None
 
-def prepare_new_card():
-    st.session_state.current_idx = random.randint(0, len(df) - 1)
+def prepare_new_card(filtered_df):
+    if filtered_df.empty:
+        return
+    st.session_state.current_idx = random.randint(0, len(filtered_df) - 1)
     st.session_state.attempts = 0
     st.session_state.feedback = None
     
-    # Genereer 4 opties (1 correct, 3 fout)
-    correct_answer = df.iloc[st.session_state.current_idx]['Capital']
-    wrong_answers = df[df['Capital'] != correct_answer]['Capital'].sample(3).tolist()
+    correct_answer = filtered_df.iloc[st.session_state.current_idx]['Capital']
+    # Pak foute antwoorden uit de HELE dataset voor meer variatie
+    wrong_answers = df_full[df_full['Capital'] != correct_answer]['Capital'].sample(3).tolist()
     
     options = wrong_answers + [correct_answer]
     random.shuffle(options)
     st.session_state.options = options
 
-# Eerste keer opties genereren
-if not st.session_state.options:
-    prepare_new_card()
+# --- UI & FILTERS ---
+st.set_page_config(page_title="Continent Quiz Master", page_icon="🌎")
+st.title("🌍 Capital Quiz per Continent")
 
-# --- UI ---
-st.title("🌍 Capital Quiz Master")
-st.sidebar.header("Je Prestaties")
-st.sidebar.metric("Score", st.session_state.score)
-st.sidebar.write(f"Pogingen voor huidige kaart: {st.session_state.attempts}/2")
+# Sidebar voor instellingen
+st.sidebar.header("⚙️ Instellingen")
+all_continents = sorted(df_full['Continent'].unique().tolist())
+selected_continents = st.sidebar.multiselect(
+    "Kies continenten om uit te quizzen:",
+    options=all_continents,
+    default=all_continents
+)
 
-if df is not None:
-    current_country = df.iloc[st.session_state.current_idx]['Country']
-    correct_capital = df.iloc[st.session_state.current_idx]['Capital']
+# Filter de dataframe
+df_filtered = df_full[df_full['Continent'].isin(selected_continents)].reset_index(drop=True)
 
-    st.markdown(f"### Wat is de hoofdstad van **{current_country}**?")
+st.sidebar.divider()
+st.sidebar.metric("Totaal Score", st.session_state.score)
 
-    # Toon knoppen voor de 4 opties
+# Controleer of er data is na filtering
+if df_filtered.empty:
+    st.warning("Selecteer minimaal één continent in de zijbalk om te beginnen.")
+else:
+    # Initialiseer eerste kaart als dat nog niet is gebeurd
+    if st.session_state.current_idx is None or st.session_state.current_idx >= len(df_filtered):
+        prepare_new_card(df_filtered)
+
+    # Quiz kaart
+    current_row = df_filtered.iloc[st.session_state.current_idx]
+    
+    st.markdown(f"### Wat is de hoofdstad van **{current_row['Country']}**?")
+    st.caption(f"📍 Regio: {current_row['Continent']}")
+
+    # Meerkeuze knoppen
     for option in st.session_state.options:
-        if st.button(option, key=option, use_container_width=True):
-            if option == correct_capital:
-                st.session_state.feedback = ("success", f"Correct! Het is inderdaad {option}.")
+        if st.button(option, key=f"btn_{option}", use_container_width=True):
+            if option == current_row['Capital']:
+                st.session_state.feedback = ("success", f"✅ Correct! Het is {option}.")
                 st.session_state.score += 1
                 st.balloons()
             else:
                 st.session_state.attempts += 1
                 if st.session_state.attempts < 2:
-                    st.session_state.feedback = ("warning", "Helaas, dat is niet juist. Probeer het nog één keer!")
+                    st.session_state.feedback = ("warning", "❌ Helaas! Probeer het nog één keer.")
                 else:
-                    st.session_state.feedback = ("error", f"Helaas, geen pogingen meer. Het juiste antwoord was: {correct_capital}")
+                    st.session_state.feedback = ("error", f"💥 Geen pogingen meer. Het juiste antwoord was: {current_row['Capital']}")
 
-    # Toon Feedback
+    # Feedback en Volgende
     if st.session_state.feedback:
         type, msg = st.session_state.feedback
         if type == "success": st.success(msg)
         elif type == "warning": st.warning(msg)
         else: st.error(msg)
 
-        # Toon "Volgende" knop als het antwoord goed is of pogingen op zijn
         if type == "success" or st.session_state.attempts >= 2:
             if st.button("Volgende Land ➡️"):
-                prepare_new_card()
+                prepare_new_card(df_filtered)
                 st.rerun()
 
-    if st.sidebar.button("Reset Score"):
-        st.session_state.score = 0
-        prepare_new_card()
-        st.rerun()
+# Reset optie
+if st.sidebar.button("Reset Quiz & Score"):
+    st.session_state.score = 0
+    st.session_state.current_idx = None
+    st.rerun()
