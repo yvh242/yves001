@@ -5,6 +5,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 import tempfile
 from PIL import Image as PILImage
+from reportlab.platypus import Table, TableStyle
+from reportlab.lib import colors
 
 
 # --------- PDF MAKER ---------
