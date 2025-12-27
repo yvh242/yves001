@@ -7,17 +7,42 @@ import random
 # --- DATA LADEN ---
 @st.cache_data
 def load_data():
-    # Download dataset
-    path = kagglehub.dataset_download("nikitagrec/world-capitals-gps")
-    
-    # Zoek naar het CSV bestand in de gedownloade map
-    for file in os.listdir(path):
-        if file.endswith(".csv"):
-            csv_path = os.path.join(path, file)
-            df = pd.read_csv(csv_path)
-            # Opschonen: we hebben alleen Land en Hoofdstad nodig
-            return df[['CountryName', 'CapitalName']].dropna()
-    return None
+    try:
+        # Download de nieuwste versie
+        path = kagglehub.dataset_download("nikitagrec/world-capitals-gps")
+        
+        # Zoek het CSV bestand
+        files = [f for f in os.listdir(path) if f.endswith('.csv')]
+        if not files:
+            st.error("Geen CSV-bestand gevonden in de gedownloade map.")
+            return None
+            
+        csv_path = os.path.join(path, files[0])
+        df = pd.read_csv(csv_path)
+
+        # DEBUG: Toon kolomnamen in de console als het misgaat
+        # print(df.columns) 
+
+        # We hernoemen de kolommen naar standaardnamen voor de app
+        # De dataset gebruikt meestal 'CountryName' en 'CapitalName' of 'Country' en 'Capital'
+        mapping = {
+            'CountryName': 'Country',
+            'CapitalName': 'Capital',
+            'country': 'Country',
+            'capital': 'Capital'
+        }
+        df = df.rename(columns=mapping)
+
+        # Controleer of de benodigde kolommen nu bestaan
+        if 'Country' in df.columns and 'Capital' in df.columns:
+            return df[['Country', 'Capital']].dropna()
+        else:
+            st.error(f"Kolommen niet gevonden. Beschikbare kolommen: {list(df.columns)}")
+            return None
+
+    except Exception as e:
+        st.error(f"Fout bij het laden van data: {e}")
+        return None
 
 df = load_data()
 
