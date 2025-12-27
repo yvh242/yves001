@@ -8,109 +8,90 @@ import random
 @st.cache_data
 def load_data():
     try:
-        # Download de nieuwste versie
         path = kagglehub.dataset_download("nikitagrec/world-capitals-gps")
-        
-        # Zoek het CSV bestand
         files = [f for f in os.listdir(path) if f.endswith('.csv')]
-        if not files:
-            st.error("Geen CSV-bestand gevonden in de gedownloade map.")
-            return None
-            
-        csv_path = os.path.join(path, files[0])
-        df = pd.read_csv(csv_path)
-
-        # DEBUG: Toon kolomnamen in de console als het misgaat
-        # print(df.columns) 
-
-        # We hernoemen de kolommen naar standaardnamen voor de app
-        # De dataset gebruikt meestal 'CountryName' en 'CapitalName' of 'Country' en 'Capital'
-        mapping = {
-            'CountryName': 'Country',
-            'CapitalName': 'Capital',
-            'country': 'Country',
-            'capital': 'Capital'
-        }
-        df = df.rename(columns=mapping)
-
-        # Controleer of de benodigde kolommen nu bestaan
-        if 'Country' in df.columns and 'Capital' in df.columns:
-            return df[['Country', 'Capital']].dropna()
-        else:
-            st.error(f"Kolommen niet gevonden. Beschikbare kolommen: {list(df.columns)}")
-            return None
-
+        if not files: return None
+        
+        df = pd.read_csv(os.path.join(path, files[0]))
+        # Mapping voor verschillende mogelijke kolomnamen
+        df = df.rename(columns={'CountryName': 'Country', 'CapitalName': 'Capital', 
+                                'country': 'Country', 'capital': 'Capital'})
+        return df[['Country', 'Capital']].dropna().reset_index(drop=True)
     except Exception as e:
-        st.error(f"Fout bij het laden van data: {e}")
+        st.error(f"Fout bij laden: {e}")
         return None
 
 df = load_data()
 
 # --- SESSIE BEHEER ---
-if 'current_index' not in st.session_state:
-    st.session_state.current_index = random.randint(0, len(df) - 1)
-if 'show_answer' not in st.session_state:
-    st.session_state.show_answer = False
+if 'score' not in st.session_state:
+    st.session_state.score = 0
+if 'current_idx' not in st.session_state:
+    st.session_state.current_idx = random.randint(0, len(df) - 1)
+if 'attempts' not in st.session_state:
+    st.session_state.attempts = 0
+if 'options' not in st.session_state:
+    st.session_state.options = []
+if 'feedback' not in st.session_state:
+    st.session_state.feedback = None
 
-def next_card():
-    st.session_state.current_index = random.randint(0, len(df) - 1)
-    st.session_state.show_answer = False
+def prepare_new_card():
+    st.session_state.current_idx = random.randint(0, len(df) - 1)
+    st.session_state.attempts = 0
+    st.session_state.feedback = None
+    
+    # Genereer 4 opties (1 correct, 3 fout)
+    correct_answer = df.iloc[st.session_state.current_idx]['Capital']
+    wrong_answers = df[df['Capital'] != correct_answer]['Capital'].sample(3).tolist()
+    
+    options = wrong_answers + [correct_answer]
+    random.shuffle(options)
+    st.session_state.options = options
 
-# --- UI LAYOUT ---
-st.set_page_config(page_title="Wereldsteden Flashcards", page_icon="🌍")
-st.title("🌍 Hoofdsteden Flashcards")
-st.write("Test je kennis van wereldsteden met deze dataset van Kaggle!")
+# Eerste keer opties genereren
+if not st.session_state.options:
+    prepare_new_card()
+
+# --- UI ---
+st.title("🌍 Capital Quiz Master")
+st.sidebar.header("Je Prestaties")
+st.sidebar.metric("Score", st.session_state.score)
+st.sidebar.write(f"Pogingen voor huidige kaart: {st.session_state.attempts}/2")
 
 if df is not None:
-    row = df.iloc[st.session_state.current_index]
-    
-    # De Kaart (Card)
-    st.markdown(f"""
-        <div style="
-            border: 2px solid #4CAF50;
-            border-radius: 15px;
-            padding: 40px;
-            text-align: center;
-            background-color: #f9f9f9;
-            margin-bottom: 20px;">
-            <h2 style="color: #333;">Wat is de hoofdstad van:</h2>
-            <h1 style="color: #1E88E5;">{row['Country']}?</h1>
-        </div>
-    """, unsafe_allow_html=True)
+    current_country = df.iloc[st.session_state.current_idx]['Country']
+    correct_capital = df.iloc[st.session_state.current_idx]['Capital']
 
-    # Knoppen interactie
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("Toon Antwoord", use_container_width=True):
-            st.session_state.show_answer = True
-            
-    with col2:
-        if st.button("Volgende Kaart ➡️", use_container_width=True):
-            next_card()
-            st.rerun()
+    st.markdown(f"### Wat is de hoofdstad van **{current_country}**?")
 
-    # Antwoord sectie
-    if st.session_state.show_answer:
-        st.markdown(f"""
-            <div style="
-                text-align: center;
-                padding: 20px;
-                background-color: #e3f2fd;
-                border-radius: 10px;
-                border: 1px dashed #1E88E5;">
-                <h3 style="margin:0;">Het antwoord is:</h3>
-                <h1 style="color: #D32F2F; margin:0;">{row['Capital']}</h1>
-            </div>
-        """, unsafe_allow_html=True)
-        st.balloons()
+    # Toon knoppen voor de 4 opties
+    for option in st.session_state.options:
+        if st.button(option, key=option, use_container_width=True):
+            if option == correct_capital:
+                st.session_state.feedback = ("success", f"Correct! Het is inderdaad {option}.")
+                st.session_state.score += 1
+                st.balloons()
+            else:
+                st.session_state.attempts += 1
+                if st.session_state.attempts < 2:
+                    st.session_state.feedback = ("warning", "Helaas, dat is niet juist. Probeer het nog één keer!")
+                else:
+                    st.session_state.feedback = ("error", f"Helaas, geen pogingen meer. Het juiste antwoord was: {correct_capital}")
 
-else:
-    st.error("Kon de dataset niet laden. Controleer je internetverbinding.")
+    # Toon Feedback
+    if st.session_state.feedback:
+        type, msg = st.session_state.feedback
+        if type == "success": st.success(msg)
+        elif type == "warning": st.warning(msg)
+        else: st.error(msg)
 
-# --- SIDEBAR INFO ---
-st.sidebar.header("Statistieken")
-st.sidebar.write(f"Totaal aantal landen in lijst: {len(df)}")
-if st.sidebar.button("Reset Sessie"):
-    next_card()
-    st.rerun()
+        # Toon "Volgende" knop als het antwoord goed is of pogingen op zijn
+        if type == "success" or st.session_state.attempts >= 2:
+            if st.button("Volgende Land ➡️"):
+                prepare_new_card()
+                st.rerun()
+
+    if st.sidebar.button("Reset Score"):
+        st.session_state.score = 0
+        prepare_new_card()
+        st.rerun()
