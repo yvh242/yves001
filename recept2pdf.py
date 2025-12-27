@@ -8,7 +8,7 @@ import os
 class RecipePDF(FPDF):
     def header(self):
         self.set_font("Arial", 'B', 15)
-        self.cell(0, 10, "Mijn Recept", ln=True, align='C')
+        self.cell(0, 10, "", ln=True, align='C')
         self.ln(5)
 
 # --- APP LAYOUT ---
