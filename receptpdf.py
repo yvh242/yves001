@@ -1,5 +1,5 @@
 import streamlit as st
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
@@ -7,7 +7,7 @@ import tempfile
 
 
 # --------- PDF MAKER ---------
-def maak_pdf(titel, ingredienten, stappen):
+def maak_pdf_van_tekst(titel, volledige_tekst):
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
 
     doc = SimpleDocTemplate(
@@ -21,33 +21,14 @@ def maak_pdf(titel, ingredienten, stappen):
 
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(name="Titel", fontSize=20, spaceAfter=20))
-    styles.add(ParagraphStyle(name="Kop", fontSize=14, spaceBefore=12, spaceAfter=8))
+    styles.add(ParagraphStyle(name="Body", fontSize=11, spaceAfter=10))
 
     story = []
-
-    # Titel
     story.append(Paragraph(titel, styles["Titel"]))
     story.append(Spacer(1, 12))
 
-    # Ingrediënten
-    story.append(Paragraph("Ingrediënten", styles["Kop"]))
-    story.append(
-        ListFlowable(
-            [ListItem(Paragraph(i, styles["Normal"])) for i in ingredienten],
-            bulletType="bullet"
-        )
-    )
-
-    story.append(Spacer(1, 12))
-
-    # Bereidingswijze
-    story.append(Paragraph("Bereidingswijze", styles["Kop"]))
-    story.append(
-        ListFlowable(
-            [ListItem(Paragraph(s, styles["Normal"])) for s in stappen],
-            bulletType="1"
-        )
-    )
+    for alinea in volledige_tekst.split("\n\n"):
+        story.append(Paragraph(alinea.replace("\n", "<br/>"), styles["Body"]))
 
     doc.build(story)
     return tmp.name
@@ -59,32 +40,44 @@ st.title("🍽️ Recept → PDF")
 
 titel = st.text_input("Titel van het recept")
 
-ingredienten_tekst = st.text_area(
+ingredienten = st.text_area(
     "Ingrediënten (1 per lijn)",
-    height=150,
-    placeholder="6 stronken witloof\n6 sneden ham\n200 g kaas"
+    height=120
 )
 
-bereiding_tekst = st.text_area(
+bereiding = st.text_area(
     "Bereidingswijze (1 stap per lijn)",
-    height=200,
-    placeholder="Kook het witloof beetgaar\nRol in ham\nMaak de kaassaus\nBak 30 minuten"
+    height=150
 )
 
-# Verwerking
-ingredienten = [i.strip() for i in ingredienten_tekst.split("\n") if i.strip()]
-stappen = [s.strip() for s in bereiding_tekst.split("\n") if s.strip()]
+# Stap 1: combineer alles
+if st.button("📝 Maak voorbeeldtekst"):
+    gecombineerde_tekst = f"""INGREDIËNTEN
+{ingredienten}
 
+BEREIDINGSWIJZE
+{bereiding}
+"""
+    st.session_state["volledige_tekst"] = gecombineerde_tekst
+
+# Stap 2: bewerkbare totaaltekst
+volledige_tekst = st.text_area(
+    "Volledige tekst (vrij bewerkbaar)",
+    height=300,
+    value=st.session_state.get("volledige_tekst", "")
+)
+
+# Stap 3: PDF
 if st.button("📄 Genereer PDF"):
-    if not titel or not ingredienten or not stappen:
-        st.warning("Vul titel, ingrediënten en bereidingswijze in.")
+    if not titel or not volledige_tekst.strip():
+        st.warning("Titel en tekst mogen niet leeg zijn.")
     else:
-        pdf_pad = maak_pdf(titel, ingredienten, stappen)
+        pdf_pad = maak_pdf_van_tekst(titel, volledige_tekst)
 
         with open(pdf_pad, "rb") as f:
             st.download_button(
-                label="⬇️ Download PDF",
-                data=f,
+                "⬇️ Download PDF",
+                f,
                 file_name=f"{titel}.pdf",
                 mime="application/pdf"
             )
