@@ -8,7 +8,9 @@ from PIL import Image as PILImage
 
 
 # --------- PDF MAKER ---------
-def maak_pdf(titel, volledige_tekst, foto_pad=None):
+def maak_pdf(titel, ingredienten, bereiding, foto_pad=None,
+             foto_breedte_cm=8, foto_hoogte_cm=6):
+
     tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
 
     doc = SimpleDocTemplate(
@@ -22,23 +24,49 @@ def maak_pdf(titel, volledige_tekst, foto_pad=None):
 
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(name="Titel", fontSize=20, spaceAfter=20))
-    styles.add(ParagraphStyle(name="Body", fontSize=11, spaceAfter=10))
+    styles.add(ParagraphStyle(name="Kop", fontSize=14, spaceAfter=10))
+    styles.add(ParagraphStyle(name="Body", fontSize=11, spaceAfter=6))
 
     story = []
 
-    # Foto (optioneel)
-    if foto_pad:
-        img = Image(foto_pad, width=12 * cm, height=8 * cm)
-        story.append(img)
-        story.append(Spacer(1, 12))
-
     # Titel
     story.append(Paragraph(titel, styles["Titel"]))
-    story.append(Spacer(1, 12))
 
-    # Tekst
-    for alinea in volledige_tekst.split("\n\n"):
-        story.append(Paragraph(alinea.replace("\n", "<br/>"), styles["Body"]))
+    # Ingrediënten tekst
+    ingredienten_par = Paragraph(
+        "<b>Ingrediënten</b><br/>" +
+        ingredienten.replace("\n", "<br/>"),
+        styles["Body"]
+    )
+
+    # Foto (optioneel)
+    foto_obj = ""
+    if foto_pad:
+        foto_obj = Image(
+            foto_pad,
+            width=foto_breedte_cm * cm,
+            height=foto_hoogte_cm * cm
+        )
+
+    # Tabel: ingrediënten links, foto rechts
+    tabel = Table(
+        [[ingredienten_par, foto_obj]],
+        colWidths=[9 * cm, 7 * cm]
+    )
+
+    tabel.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+    ]))
+
+    story.append(tabel)
+    story.append(Spacer(1, 20))
+
+    # Bereiding
+    story.append(Paragraph("Bereidingswijze", styles["Kop"]))
+    for stap in bereiding.split("\n"):
+        story.append(Paragraph(stap, styles["Body"]))
 
     doc.build(story)
     return tmp_pdf.name
@@ -64,6 +92,25 @@ foto = st.file_uploader(
     "📷 Optionele foto van het gerecht",
     type=["jpg", "jpeg", "png"]
 )
+
+col1, col2 = st.columns(2)
+with col1:
+    foto_breedte_cm = st.number_input(
+        "Foto breedte (cm)",
+        min_value=3.0,
+        max_value=15.0,
+        value=8.0,
+        step=0.5
+    )
+
+with col2:
+    foto_hoogte_cm = st.number_input(
+        "Foto hoogte (cm)",
+        min_value=3.0,
+        max_value=15.0,
+        value=6.0,
+        step=0.5
+    )
 
 # Foto tijdelijk opslaan
 foto_pad = None
@@ -93,10 +140,17 @@ volledige_tekst = st.text_area(
 
 # Stap 3: PDF genereren
 if st.button("📄 Genereer PDF"):
-    if not titel or not volledige_tekst.strip():
-        st.warning("Titel en tekst mogen niet leeg zijn.")
+    if not titel:
+        st.warning("Titel is verplicht.")
     else:
-        pdf_pad = maak_pdf(titel, volledige_tekst, foto_pad)
+        pdf_pad = maak_pdf(
+            titel,
+            ingredienten,
+            bereiding,
+            foto_pad,
+            foto_breedte_cm,
+            foto_hoogte_cm
+        )
 
         with open(pdf_pad, "rb") as f:
             st.download_button(
