@@ -3,39 +3,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
-import re
 import tempfile
-
-
-# --------- TEKST PARSER ---------
-def structureer_recept(vrije_tekst):
-    ingred = []
-    stappen = []
-
-    tekst = vrije_tekst.lower()
-
-    # splits op ingrediënten / bereiding
-    if "bereiding" in tekst:
-        delen = re.split(r"bereiding[:\-]?", vrije_tekst, flags=re.IGNORECASE)
-        ingred_tekst = delen[0]
-        bereiding_tekst = delen[1]
-    else:
-        ingred_tekst = vrije_tekst
-        bereiding_tekst = ""
-
-    # ingrediënten herkennen
-    for lijn in ingred_tekst.split(","):
-        lijn = lijn.strip()
-        if len(lijn) > 2:
-            ingred.append(lijn.capitalize())
-
-    # stappen herkennen
-    for zin in re.split(r"\.|\\n", bereiding_tekst):
-        zin = zin.strip()
-        if len(zin) > 5:
-            stappen.append(zin.capitalize())
-
-    return ingred, stappen
 
 
 # --------- PDF MAKER ---------
@@ -45,10 +13,10 @@ def maak_pdf(titel, ingredienten, stappen):
     doc = SimpleDocTemplate(
         tmp.name,
         pagesize=A4,
-        rightMargin=2*cm,
-        leftMargin=2*cm,
-        topMargin=2*cm,
-        bottomMargin=2*cm
+        rightMargin=2 * cm,
+        leftMargin=2 * cm,
+        topMargin=2 * cm,
+        bottomMargin=2 * cm
     )
 
     styles = getSampleStyleSheet()
@@ -56,53 +24,67 @@ def maak_pdf(titel, ingredienten, stappen):
     styles.add(ParagraphStyle(name="Kop", fontSize=14, spaceBefore=12, spaceAfter=8))
 
     story = []
-    story.append(Paragraph(titel, styles["Titel"]))
 
+    # Titel
+    story.append(Paragraph(titel, styles["Titel"]))
+    story.append(Spacer(1, 12))
+
+    # Ingrediënten
     story.append(Paragraph("Ingrediënten", styles["Kop"]))
-    story.append(ListFlowable(
-        [ListItem(Paragraph(i, styles["Normal"])) for i in ingredienten],
-        bulletType="bullet"
-    ))
+    story.append(
+        ListFlowable(
+            [ListItem(Paragraph(i, styles["Normal"])) for i in ingredienten],
+            bulletType="bullet"
+        )
+    )
 
     story.append(Spacer(1, 12))
+
+    # Bereidingswijze
     story.append(Paragraph("Bereidingswijze", styles["Kop"]))
-    story.append(ListFlowable(
-        [ListItem(Paragraph(s, styles["Normal"])) for s in stappen],
-        bulletType="1"
-    ))
+    story.append(
+        ListFlowable(
+            [ListItem(Paragraph(s, styles["Normal"])) for s in stappen],
+            bulletType="1"
+        )
+    )
 
     doc.build(story)
     return tmp.name
 
 
 # --------- STREAMLIT UI ---------
+st.set_page_config(page_title="Recept → PDF", page_icon="🍽️")
 st.title("🍽️ Recept → PDF")
 
-titel = st.text_input("Recept titel")
+titel = st.text_input("Titel van het recept")
 
-vrije_tekst = st.text_area(
-    "Plak hier je volledige recept (vrije tekst)",
-    height=200,
-    placeholder="Ingrediënten: ... Bereiding: ..."
+ingredienten_tekst = st.text_area(
+    "Ingrediënten (1 per lijn)",
+    height=150,
+    placeholder="6 stronken witloof\n6 sneden ham\n200 g kaas"
 )
 
-if st.button("✨ Structureer recept"):
-    ingredienten, stappen = structureer_recept(vrije_tekst)
+bereiding_tekst = st.text_area(
+    "Bereidingswijze (1 stap per lijn)",
+    height=200,
+    placeholder="Kook het witloof beetgaar\nRol in ham\nMaak de kaassaus\nBak 30 minuten"
+)
 
-    st.subheader("Ingrediënten")
-    for i in ingredienten:
-        st.write("•", i)
+# Verwerking
+ingredienten = [i.strip() for i in ingredienten_tekst.split("\n") if i.strip()]
+stappen = [s.strip() for s in bereiding_tekst.split("\n") if s.strip()]
 
-    st.subheader("Bereidingswijze")
-    for idx, s in enumerate(stappen, 1):
-        st.write(f"{idx}. {s}")
-
-    if st.button("📄 Download PDF"):
+if st.button("📄 Genereer PDF"):
+    if not titel or not ingredienten or not stappen:
+        st.warning("Vul titel, ingrediënten en bereidingswijze in.")
+    else:
         pdf_pad = maak_pdf(titel, ingredienten, stappen)
+
         with open(pdf_pad, "rb") as f:
             st.download_button(
-                "⬇️ Download recept PDF",
-                f,
+                label="⬇️ Download PDF",
+                data=f,
                 file_name=f"{titel}.pdf",
                 mime="application/pdf"
             )
