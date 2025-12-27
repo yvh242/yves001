@@ -4,3 +4,4 @@ pillow
 fpdf2
 pandas
 kagglehub
+pycountry
