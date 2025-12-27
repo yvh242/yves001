@@ -3,39 +3,49 @@ import pandas as pd
 import kagglehub
 import os
 import random
+import pycountry
+import gettext
+import pydeck as pdk
 
-# --- VERTALINGEN ---
+# --- VERTALINGS LOGICA ---
+def translate_country(en_name):
+    try:
+        country = pycountry.countries.search_fuzzy(en_name)[0]
+        dutch = gettext.translation('iso3166', pycountry.LOCALES_DIR, languages=['nl'])
+        dutch.install()
+        return _(country.name)
+    except:
+        return en_name
+
 continent_vertaling = {
-    "Africa": "Afrika",
-    "Antarctica": "Antarctica",
-    "Asia": "Azië",
-    "Europe": "Europa",
-    "North America": "Noord-Amerika",
-    "Oceania": "Oceanië",
-    "South America": "Zuid-Amerika"
+    "Africa": "Afrika", "Antarctica": "Antarctica", "Asia": "Azië",
+    "Europe": "Europa", "Noord-Amerika": "North America", # Voor de zekerheid beide kanten
+    "North America": "Noord-Amerika", "Oceania": "Oceanië", "South America": "Zuid-Amerika"
 }
 
 # --- DATA LADEN ---
 @st.cache_data
 def load_data():
-    try:
-        path = kagglehub.dataset_download("nikitagrec/world-capitals-gps")
-        files = [f for f in os.listdir(path) if f.endswith('.csv')]
-        if not files: return None
-        
-        df = pd.read_csv(os.path.join(path, files[0]))
-        mapping = {
-            'CountryName': 'Country', 
-            'CapitalName': 'Capital', 
-            'ContinentName': 'Continent'
-        }
-        df = df.rename(columns=mapping)
-        # Vertaal de continenten in de dataframe
-        df['Continent'] = df['Continent'].map(continent_vertaling).fillna(df['Continent'])
-        return df[['Country', 'Capital', 'Continent']].dropna().reset_index(drop=True)
-    except Exception as e:
-        st.error(f"Fout bij laden: {e}")
-        return None
+    path = kagglehub.dataset_download("nikitagrec/world-capitals-gps")
+    files = [f for f in os.listdir(path) if f.endswith('.csv')]
+    df = pd.read_csv(os.path.join(path, files[0]))
+    
+    # Hernoem kolommen naar bruikbare namen
+    df = df.rename(columns={
+        'CountryName': 'Country', 
+        'CapitalName': 'Capital', 
+        'ContinentName': 'Continent',
+        'CapitalLatitude': 'lat', 
+        'CapitalLongitude': 'lon'
+    })
+    
+    # Vertalingen
+    df['Continent'] = df['Continent'].map(continent_vertaling).fillna(df['Continent'])
+    unique_countries = df['Country'].unique()
+    country_map = {name: translate_country(name) for name in unique_countries}
+    df['Country'] = df['Country'].map(country_map)
+    
+    return df[['Country', 'Capital', 'Continent', 'lat', 'lon']].dropna().reset_index(drop=True)
 
 df_full = load_data()
 
@@ -66,73 +76,86 @@ def prepare_new_card(filtered_df):
     random.shuffle(options)
     st.session_state.options = options
 
-# --- UI & FILTERS ---
-st.set_page_config(page_title="Continent Quiz NL", page_icon="🌎")
-st.title("🌍 Hoofdsteden Quiz")
+# --- UI ---
+st.set_page_config(page_title="Topografie Master", layout="wide")
 
-# Stap 1: Selectie (alleen tonen als quiz NIET gestart is)
 if not st.session_state.quiz_gestart:
-    st.subheader("Selecteer de continenten die je wilt oefenen:")
+    st.title("🌎 Welkom bij de Wereld Quiz")
     all_continents = sorted(df_full['Continent'].unique().tolist())
-    selected_continents = st.multiselect(
-        "Kies één of meerdere:",
-        options=all_continents,
-        default=all_continents
-    )
+    selected = st.multiselect("Kies je continenten:", all_continents, default=["Europa"])
     
     if st.button("🚀 Start de Quiz", use_container_width=True):
-        if selected_continents:
-            st.session_state.selected_continents = selected_continents
+        if selected:
+            st.session_state.selected_continents = selected
             st.session_state.quiz_gestart = True
             st.rerun()
         else:
-            st.warning("Kies minimaal één continent!")
-
-# Stap 2: De Quiz (tonen als quiz gestart is)
+            st.warning("Kies eerst een continent.")
 else:
     df_filtered = df_full[df_full['Continent'].isin(st.session_state.selected_continents)].reset_index(drop=True)
-
-    # Sidebar info
-    st.sidebar.header("📊 Voortgang")
-    st.sidebar.metric("Score", st.session_state.score)
-    st.sidebar.write(f"Geselecteerd: {', '.join(st.session_state.selected_continents)}")
     
+    if st.session_state.current_idx is None:
+        prepare_new_card(df_filtered)
+
+    row = df_filtered.iloc[st.session_state.current_idx]
+
+    # Layout met twee kolommen: Kaart links, Vragen rechts
+    col_map, col_quiz = st.columns([2, 1])
+
+    with col_map:
+        # De kaart focussen op de hoofdstad
+        view_state = pdk.ViewState(
+            latitude=row['lat'],
+            longitude=row['lon'],
+            zoom=3,
+            pitch=0
+        )
+        
+        layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=pd.DataFrame([row]),
+            get_position='[lon, lat]',
+            get_color='[200, 30, 0, 160]',
+            get_radius=200000,
+        )
+
+        st.pydeck_chart(pdk.Deck(
+            layers=[layer],
+            initial_view_state=view_state,
+            map_style="mapbox://styles/mapbox/light-v9"
+        ))
+
+    with col_quiz:
+        st.subheader(f"Wat is de hoofdstad van:")
+        st.header(f"📍 {row['Country']}")
+        st.write(f"Continent: *{row['Continent']}*")
+        st.divider()
+
+        for option in st.session_state.options:
+            if st.button(option, key=option, use_container_width=True):
+                if option == row['Capital']:
+                    st.session_state.feedback = ("success", f"✅ Goed! Het is {option}.")
+                    st.session_state.score += 1
+                    st.balloons()
+                else:
+                    st.session_state.attempts += 1
+                    if st.session_state.attempts < 2:
+                        st.session_state.feedback = ("warning", "❌ Fout. Nog één poging!")
+                    else:
+                        st.session_state.feedback = ("error", f"💥 Helaas. Het was {row['Capital']}.")
+
+        if st.session_state.feedback:
+            t, m = st.session_state.feedback
+            getattr(st, t)(m)
+            if t == "success" or st.session_state.attempts >= 2:
+                if st.button("Volgende Land ➡️", use_container_width=True):
+                    prepare_new_card(df_filtered)
+                    st.rerun()
+
+    # Sidebar Stopknop
+    st.sidebar.metric("Score", st.session_state.score)
     if st.sidebar.button("⏹ Stop Quiz"):
         st.session_state.quiz_gestart = False
         st.session_state.score = 0
         st.session_state.current_idx = None
         st.rerun()
-
-    if st.session_state.current_idx is None:
-        prepare_new_card(df_filtered)
-
-    current_row = df_filtered.iloc[st.session_state.current_idx]
-    
-    st.markdown(f"### Wat is de hoofdstad van **{current_row['Country']}**?")
-    st.caption(f"🌍 Continent: {current_row['Continent']}")
-
-    # Knoppen
-    for option in st.session_state.options:
-        if st.button(option, key=f"btn_{option}", use_container_width=True):
-            if option == current_row['Capital']:
-                st.session_state.feedback = ("success", f"✅ Juist! Het is {option}.")
-                st.session_state.score += 1
-                st.balloons()
-            else:
-                st.session_state.attempts += 1
-                if st.session_state.attempts < 2:
-                    st.session_state.feedback = ("warning", "❌ Fout. Je hebt nog één poging!")
-                else:
-                    st.session_state.feedback = ("error", f"💥 Helaas. Het juiste antwoord was: {current_row['Capital']}")
-
-    # Feedback en Volgende
-    if st.session_state.feedback:
-        type, msg = st.session_state.feedback
-        if type == "success": st.success(msg)
-        elif type == "warning": st.warning(msg)
-        else: st.error(msg)
-
-        if type == "success" or st.session_state.attempts >= 2:
-            if st.button("Volgende Land ➡️"):
-                prepare_new_card(df_filtered)
-                st.rerun()
