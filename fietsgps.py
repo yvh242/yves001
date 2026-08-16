@@ -81,5 +81,3 @@ st_folium(m, width=700, height=500)
 # Ververs knop
 if st.button("Ververs kaart"):
     st.rerun()
-app.py
-app.py weergeven.
