@@ -6,3 +6,7 @@ pandas
 kagglehub
 pycountry
 pydeck
+streamlit-geolocation
+gpxpy
+folium
+streamlit-folium
