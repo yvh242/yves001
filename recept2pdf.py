@@ -23,24 +23,27 @@ bereiding_input = st.text_area("Bereidingswijze", "Kook de pasta al dente en men
 
 st.divider()
 
-st.subheader("2. Foto & Instellingen")
+st.subheader("2. Vrije Layout & Posities Instellen")
 uploaded_file = st.file_uploader("Voeg een foto toe (optioneel)", type=["jpg", "jpeg", "png"])
 
-# Keuze voor de opmaak / volgorde van de blokken
-layout_keuze = st.selectbox(
-    "Kies de indeling op de PDF",
-    [
-        "Standaard: Ingrediënten links, Foto rechts, Bereidingswijze onder",
-        "Omgekeerd: Foto links, Ingrediënten rechts, Bereidingswijze onder",
-        "Volledig onder elkaar: Foto bovenaan, Ingrediënten, Bereidingswijze"
-    ]
-)
+# Vrije keuze voor de positie van elk blok
+col_l1, col_l2, col_l3 = st.columns(3)
+with col_l1:
+    layout_ingr = st.selectbox("Positie Ingrediënten", ["Links", "Rechts", "Onder elkaar"], index=0)
+with col_l2:
+    layout_bereiding = st.selectbox("Positie Bereiding", ["Onder alles", "Naast Ingrediënten", "Volledig vrij"], index=0)
+with col_l3:
+    layout_foto = st.selectbox("Positie Foto", ["Rechts", "Links", "Bovenin"], index=0)
+
+st.divider()
 
 col1, col2 = st.columns(2)
 with col1:
+    st.markdown("### 📏 Foto Afmetingen")
     img_width = st.slider("Breedte foto (mm)", 10, 150, 60)
     img_height = st.slider("Hoogte foto (mm)", 10, 150, 60)
 with col2:
+    st.markdown("### ✍️ Tekstgrootte")
     size_titel = st.slider("Grootte Titel", 12, 40, 24)
     size_body = st.slider("Grootte Inhoud", 8, 20, 11)
 
@@ -55,67 +58,78 @@ if st.button("Genereer en Download PDF"):
     
     start_y = pdf.get_y()
     
-    # Hulpfunctie om ingrediënten blok te schrijven
-    def write_ingrediënten(x_pos=None, y_pos=None, max_w=0):
-        if x_pos is not None and y_pos is not None:
-            pdf.set_xy(x_pos, y_pos)
+    # Hulpfuncties voor blokken
+    def draw_ingrediënten(x=10, y=None, w=90):
+        if y is not None:
+            pdf.set_xy(x, y)
+        else:
+            pdf.set_x(x)
         pdf.set_font("Arial", 'B', size_body + 2)
-        pdf.cell(max_w, 10, "Ingrediënten:", ln=True)
+        pdf.cell(w, 8, "Ingrediënten:", ln=True)
         pdf.set_font("Arial", '', size_body)
         for line in ingr_input.split('\n'):
             if line.strip():
-                if x_pos is not None:
-                    pdf.set_x(x_pos)
-                pdf.cell(max_w, 6, safe_text(f"- {line.strip()}"), ln=True)
+                pdf.set_x(x)
+                pdf.cell(w, 5, safe_text(f"- {line.strip()}"), ln=True)
 
-    # Hulpfunctie om foto te plaatsen
-    def write_foto(x_pos, y_pos):
+    def draw_foto(x, y):
         if uploaded_file:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
                 img = Image.open(uploaded_file)
                 img.save(tmp_file.name)
-                pdf.image(tmp_file.name, x=x_pos, y=y_pos, w=img_width, h=img_height)
+                pdf.image(tmp_file.name, x=x, y=y, w=img_width, h=img_height)
                 os.unlink(tmp_file.name)
 
-    bottom_blocks_y = start_y
+    def draw_bereiding(y_pos=None):
+        if y_pos is not None:
+            pdf.set_y(y_pos)
+        pdf.ln(5)
+        pdf.set_font("Arial", 'B', size_body + 2)
+        pdf.cell(0, 8, "Bereidingswijze:", ln=True)
+        pdf.set_font("Arial", '', size_body)
+        pdf.multi_cell(0, 5, safe_text(bereiding_input))
 
-    if "Standaard" in layout_keuze:
-        # Ingrediënten links (breedte 100mm), Foto rechts op x=110
-        write_ingrediënten(max_w=100)
-        if uploaded_file:
-            write_foto(x_pos=110, y_pos=start_y)
+    # Logica op basis van gekozen posities
+    # Scenario A: Ingrediënten Links, Foto Rechts (Standaard side-by-side)
+    if layout_ingr == "Links" and layout_foto == "Rechts" and uploaded_file:
+        draw_ingrediënten(x=10, y=start_y, w=95)
+        draw_foto(x=110, y=start_y)
         
-        current_y = pdf.get_y()
-        photo_bottom_y = start_y + img_height if uploaded_file else 0
-        bottom_blocks_y = max(current_y, photo_bottom_y) + 10
+        ingr_bottom = pdf.get_y()
+        foto_bottom = start_y + img_height
+        next_y = max(ingr_bottom, foto_bottom) + 10
+        
+        if layout_bereiding == "Onder alles":
+            draw_bereiding(y_pos=next_y)
 
-    elif "Omgekeerd" in layout_keuze:
-        # Foto links op x=10, Ingrediënten rechts op x=80
-        if uploaded_file:
-            write_foto(x_pos=10, y_pos=start_y)
+    # Scenario B: Foto Links, Ingrediënten Rechts
+    elif layout_foto == "Links" and layout_ingr == "Rechts" and uploaded_file:
+        draw_foto(x=10, y=start_y)
+        draw_ingrediënten(x=80, y=start_y, w=120)
         
-        write_ingrediënten(x_pos=80, y_pos=start_y, max_w=120)
+        ingr_bottom = pdf.get_y()
+        foto_bottom = start_y + img_height
+        next_y = max(ingr_bottom, foto_bottom) + 10
         
-        current_y = pdf.get_y()
-        photo_bottom_y = start_y + img_height if uploaded_file else 0
-        bottom_blocks_y = max(current_y, photo_bottom_y) + 10
+        if layout_bereiding == "Onder alles":
+            draw_bereiding(y_pos=next_y)
 
+    # Scenario C: Alles onder elkaar (of als geen foto is ingevoerd)
     else:
-        # Volledig onder elkaar: Foto eerst (centraal of links), dan ingrediënten
-        if uploaded_file:
-            write_foto(x_pos=10, y_pos=start_y)
-            bottom_blocks_y = start_y + img_height + 10
+        current_y = start_y
+        if uploaded_file and layout_foto == "Bovenin":
+            draw_foto(x=10, y=current_y)
+            current_y += img_height + 10
+            
+        draw_ingrediënten(x=10, y=current_y, w=180)
+        current_y = pdf.get_y() + 10
         
-        write_ingrediënten(y_pos=bottom_blocks_y if uploaded_file else start_y)
-        bottom_blocks_y = pdf.get_y() + 10
+        if uploaded_file and layout_foto == "Rechts":
+            # Foto kan hiernaast of onder gezet worden
+            pass
+            
+        draw_bereiding(y_pos=current_y)
 
-    # Bereidingswijze komt altijd onderaan de gekozen bovenste blokken
-    pdf.set_y(bottom_blocks_y)
-    pdf.set_font("Arial", 'B', size_body + 2)
-    pdf.cell(0, 10, "Bereidingswijze:", ln=True)
-    pdf.set_font("Arial", '', size_body)
-    pdf.multi_cell(0, 6, safe_text(bereiding_input))
-    
     pdf_output = pdf.output()
     
     st.download_button(
