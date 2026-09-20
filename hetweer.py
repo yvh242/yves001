@@ -95,43 +95,40 @@ else:
 
 st.markdown("---")
 
-# --- SECTIE 2: ACTUEEL WEER (BELGISCHE STATIONS) ---
-st.subheader("🌡️ Actueel Weer in België")
+# --- SECTIE 2: ACTUEEL WEER (STATIONS MET ZOEKFUNCTIE) ---
+st.subheader("🌡️ Actueel Weer (Zoek meetstation)")
 
 weather_json = fetch_weather_data()
 if weather_json and "actual" in weather_json:
   stations = weather_json["actual"]["stationmeasurements"]
 
-  # Filter specifiek op Belgische stations (country == 'BE') of op naam
-  belgian_stations = [
-      s for s in stations if s.get("country", "").upper() == "BE"
-  ]
+  # Maak een nette lijst met stations en hun landcode erbij zodat je kunt zoeken
+  # We sorteren ze alfabetisch op stationsnaam
+  station_dict = {}
+  for s in stations:
+    name = s.get("stationname", "Onbekend")
+    country = s.get("country", "")
+    # Label opbouwen, bijvoorbeeld: "Melle (BE)"
+    label = f"{name} ({country})" if country else name
+    station_dict[label] = s
 
-  # Als fallback alle stations tonen als de 'country' tag ontbreekt
-  active_station_list = belgian_stations if belgian_stations else stations
+  sorted_labels = sorted(list(station_dict.keys()))
 
-  station_namen = [s["stationname"] for s in active_station_list]
-
-  # Zoekbalk/selectie box specifiek voor Belgische meetstations (met automatische sortering)
-  station_namen.sort()
-
-  # Zet standaard selectie op 'Melle' of 'Gent' als deze in de lijst staat, anders de eerste
+  # Probeer automatisch te starten op Melle of Gent als die ertussen staan
   default_idx = 0
-  for idx, name in enumerate(station_namen):
-    if "melle" in name.lower() or "gent" in name.lower():
+  for idx, label in enumerate(sorted_labels):
+    if "melle" in label.lower() or "gent" in label.lower():
       default_idx = idx
       break
 
-  selected_station_name = st.selectbox(
-      "Zoek of kies een meetstation in België",
-      station_namen,
+  # De selectbox in Streamlit werkt tevens als typ-zoekbalk als je erop klikt en typt
+  selected_label = st.selectbox(
+      "Typ of selecteer een meetstation (bijv. Melle, Zaventem, Ukkel):",
+      sorted_labels,
       index=default_idx,
   )
 
-  # Data van gekozen station ophalen
-  station_data = next(
-      s for s in active_station_list if s["stationname"] == selected_station_name
-  )
+  station_data = station_dict[selected_label]
 
   col1, col2, col3, col4 = st.columns(4)
   col1.metric("Temperatuur", f"{station_data.get('temperature', 'N/B')} °C")
