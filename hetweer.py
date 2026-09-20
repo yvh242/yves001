@@ -5,31 +5,19 @@ import streamlit as st
 
 # Pagina configuratie
 st.set_page_config(
-    page_title="Het weer dashboard", page_icon="🌤️", layout="centered"
+    page_title="Het weer dashboard", page_icon="🌤️", layout="wide"
 )
 
 st.title("🌤️ Het weer dashboard (België)")
-st.write(
-    "Actueel weer, windrichting en een uurlijkse verwachting voor de komende uren."
-)
 
-# --- LOCATIE KEUZE BOVENAAN ---
-st.markdown("### 📍 Locatie")
-
-col_zoek1, col_zoek2 = st.columns([3, 1])
-
-with col_zoek1:
-  # Vrij invoerveld om automatisch te zoeken
+# --- LOCATIE KEUZE BOVENAAN (Gedeeld voor beide tabbladen) ---
+col_l1, col_l2 = st.columns([3, 1])
+with col_l1:
   ingevoerde_plaats = st.text_input(
       "Zoek een plaats of gemeente in België",
       value="Deinze",
-      help="Typ een plaatsnaam en druk op enter of klik op de zoekknop",
+      help="Typ een plaatsnaam en druk op enter",
   )
-
-with col_zoek2:
-  st.write("")  # Ruimte uitlijnen
-  st.write("")
-  zoek_trigger = st.button("Zoek locatie", type="primary")
 
 
 # Functie om coördinaten automatisch op te zoeken via Open-Meteo Geocoding API
@@ -48,7 +36,6 @@ def zoek_coordinaten(plaatsnaam):
   return None, None, None
 
 
-# Bepaal actuele coördinaten op basis van invoer
 lat, lon, locatie_naam = zoek_coordinaten(ingevoerde_plaats)
 
 if lat is None or lon is None:
@@ -64,7 +51,7 @@ else:
 st.markdown("---")
 
 
-# Functie om graden om te zetten naar windrichting (kompas)
+# Functie om graden om te zetten naar windrichting
 def deg_to_compass(deg):
   if deg is None:
     return "-"
@@ -73,7 +60,7 @@ def deg_to_compass(deg):
   return arr[(val // 2) % 8]
 
 
-# 1. Functie voor 2-uurs neerslagverwachting (Buienradar raintext)
+# API functies
 def fetch_rain_forecast(lat, lon):
   url = f"https://gpsgadget.buienradar.nl/data/raintext?lat={lat}&lon={lon}"
   try:
@@ -100,13 +87,14 @@ def fetch_rain_forecast(lat, lon):
   return pd.DataFrame()
 
 
-# 2. Functie voor actueel weer + uurlijkse verwachting via Open-Meteo
 @st.cache_data(ttl=300)
 def fetch_weather_data(lat, lon):
   url = (
       f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
       "&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_direction_10m"
       "&hourly=temperature_2m,wind_speed_10m,wind_direction_10m"
+      "&daily=temperature_2m_max,temperature_2m_min,weathercode"
+      "&timezone=auto"
   )
   try:
     response = requests.get(url, timeout=5)
@@ -117,85 +105,137 @@ def fetch_weather_data(lat, lon):
   return None
 
 
-# --- SECTIE 1: 2-UURS NEERSLAGVERWACHTING ---
-st.subheader("⏱️ Neerslagverwachting komende 2 uur")
+# --- STREAMLIT TABS ---
+tab1, tab2 = st.tabs(["⏱️ Vandaag & Uurlijks", "📅 14-daagse verwachting"])
 
-with st.spinner("Gegevens ophalen..."):
-  df_rain = fetch_rain_forecast(lat, lon)
-
-if not df_rain.empty:
-  max_rain = df_rain["Neerslag (mm/u)"].max()
-  if max_rain > 0:
-    st.warning("⚠️ **Buienalert:** Er is neerslag op komst in deze regio!")
-  else:
-    st.success("☀️ Droog: Geen neerslag verwacht de komende 2 uur.")
-
-  st.line_chart(df_rain.set_index("Tijd"))
-else:
-  st.info("Geen neerslagdata beschikbaar.")
-
-st.markdown("---")
-
-# Data ophalen voor actueel en uurlijks
 weather_data = fetch_weather_data(lat, lon)
 
-if weather_data:
-  # --- SECTIE 2: ACTUEEL WEER ---
-  st.subheader(f"🌡️ Actueel Weer voor {locatie_naam}")
-  if "current" in weather_data:
-    current = weather_data["current"]
-    wind_dir_deg = current.get("wind_direction_10m", 0)
-    wind_dir_text = deg_to_compass(wind_dir_deg)
-
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Temperatuur", f"{current.get('temperature_2m', 'N/B')} °C")
-    col2.metric(
-        "Gevoelstempr.", f"{current.get('apparent_temperature', 'N/B')} °C"
-    )
-    col3.metric(
-        "Luchtvochtigheid", f"{current.get('relative_humidity_2m', 'N/B')}%"
-    )
-    col4.metric("Windsnelheid", f"{current.get('wind_speed_10m', 'N/B')} km/h")
-    col5.metric("Windrichting", f"{wind_dir_text} ({wind_dir_deg}°)")
+with tab1:
+  st.subheader("⏱️ Neerslagverwachting komende 2 uur")
+  df_rain = fetch_rain_forecast(lat, lon)
+  if not df_rain.empty:
+    max_rain = df_rain["Neerslag (mm/u)"].max()
+    if max_rain > 0:
+      st.warning("⚠️ **Buienalert:** Er is neerslag op komst in deze regio!")
+    else:
+      st.success("☀️ Droog: Geen neerslag verwacht de komende 2 uur.")
+    st.line_chart(df_rain.set_index("Tijd"))
+  else:
+    st.info("Geen neerslagdata beschikbaar.")
 
   st.markdown("---")
 
-  # --- SECTIE 3: UURLIJKSE VERWACHTING (TABEL VOOR VOLGENDE 8 UUR) ---
-  st.subheader("📋 Weersverwachting per uur (komende 8 uur)")
+  if weather_data:
+    st.subheader(f"🌡️ Actueel Weer voor {locatie_naam}")
+    if "current" in weather_data:
+      current = weather_data["current"]
+      wind_dir_deg = current.get("wind_direction_10m", 0)
+      wind_dir_text = deg_to_compass(wind_dir_deg)
 
-  if "hourly" in weather_data:
-    hourly = weather_data["hourly"]
-    times = hourly.get("time", [])
-    temps = hourly.get("temperature_2m", [])
-    wind_speeds = hourly.get("wind_speed_10m", [])
-    wind_dirs = hourly.get("wind_direction_10m", [])
+      col1, col2, col3, col4, col5 = st.columns(5)
+      col1.metric("Temperatuur", f"{current.get('temperature_2m', 'N/B')} °C")
+      col2.metric(
+          "Gevoelstempr.", f"{current.get('apparent_temperature', 'N/B')} °C"
+      )
+      col3.metric(
+          "Luchtvochtigheid", f"{current.get('relative_humidity_2m', 'N/B')}%"
+      )
+      col4.metric(
+          "Windsnelheid", f"{current.get('wind_speed_10m', 'N/B')} km/h"
+      )
+      col5.metric("Windrichting", f"{wind_dir_text} ({wind_dir_deg}°)")
 
-    # Zoek het huidige uur om vanaf daar te beginnen
-    now_str = datetime.now().strftime("%Y-%m-%dT%H:00")
-    start_idx = 0
-    for idx, t in enumerate(times):
-      if t >= now_str:
-        start_idx = idx
-        break
+    st.markdown("---")
 
-    # Neem de komende 8 uur vanaf nu
-    end_idx = start_idx + 8
+    st.subheader("📋 Weersverwachting per uur (komende 8 uur)")
+    if "hourly" in weather_data:
+      hourly = weather_data["hourly"]
+      times = hourly.get("time", [])
+      temps = hourly.get("temperature_2m", [])
+      wind_speeds = hourly.get("wind_speed_10m", [])
+      wind_dirs = hourly.get("wind_direction_10m", [])
 
-    table_data = []
-    for i in range(start_idx, min(end_idx, len(times))):
-      tijd_formaat = datetime.fromisoformat(times[i]).strftime("%H:%M")
-      richting = deg_to_compass(wind_dirs[i])
+      now_str = datetime.now().strftime("%Y-%m-%dT%H:00")
+      start_idx = 0
+      for idx, t in enumerate(times):
+        if t >= now_str:
+          start_idx = idx
+          break
 
-      table_data.append({
-          "Tijd": tijd_formaat,
-          "Temperatuur (°C)": f"{temps[i]} °C",
-          "Windsnelheid (km/h)": f"{wind_speeds[i]} km/h",
-          "Windrichting": f"{richting} ({wind_dirs[i]}°)",
+      end_idx = start_idx + 8
+      table_data = []
+      for i in range(start_idx, min(end_idx, len(times))):
+        tijd_formaat = datetime.fromisoformat(times[i]).strftime("%H:%M")
+        richting = deg_to_compass(wind_dirs[i])
+        table_data.append({
+            "Tijd": tijd_formaat,
+            "Temperatuur (°C)": f"{temps[i]} °C",
+            "Windsnelheid (km/h)": f"{wind_speeds[i]} km/h",
+            "Windrichting": f"{richting} ({wind_dirs[i]}°)",
+        })
+
+      df_hourly = pd.DataFrame(table_data)
+      st.dataframe(df_hourly, use_container_width=True, hide_index=True)
+
+with tab2:
+  st.subheader(f"📅 14-daagse verwachting voor {locatie_naam}")
+
+  if weather_data and "daily" in weather_data:
+    daily = weather_data["daily"]
+    dates = daily.get("time", [])
+    max_temps = daily.get("temperature_2m_max", [])
+    min_temps = daily.get("temperature_2m_min", [])
+    codes = daily.get("weathercode", [])
+
+    dag_namen = {
+        "Mon": "Ma",
+        "Tue": "Di",
+        "Wed": "Wo",
+        "Thu": "Do",
+        "Fri": "Vr",
+        "Sat": "Za",
+        "Sun": "Zo",
+    }
+
+    def get_weather_desc(code):
+      if code in [0]:
+        return "☀️ Zonnig"
+      elif code in [1, 2, 3]:
+        return "⛅ Licht bewolkt"
+      elif code in [45, 48]:
+        return "🌫️ Mist"
+      elif code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
+        return "🌧️ Regen"
+      elif code in [71, 73, 75, 85, 86]:
+        return "❄️ Sneeuw"
+      else:
+        return "☁️ Bewolkt"
+
+    daily_rows = []
+    chart_data = {}
+
+    for i in range(len(dates)):
+      dt = datetime.fromisoformat(dates[i])
+      eng_dag = dt.strftime("%a")
+      nl_dag = dag_namen.get(eng_dag, eng_dag)
+      datum_str = dt.strftime("%d-%m")
+      weer_tekst = get_weather_desc(codes[i] if i < len(codes) else 0)
+
+      daily_rows.append({
+          "Dag": nl_dag,
+          "Datum": datum_str,
+          "Weer": weer_tekst,
+          "Max Temp (°C)": f"{max_temps[i]}°C",
+          "Min Temp (°C)": f"{min_temps[i]}°C",
       })
+      chart_data[f"{nl_dag} {datum_str}"] = max_temps[i]
 
-    df_hourly = pd.DataFrame(table_data)
-    st.dataframe(df_hourly, use_container_width=True, hide_index=True)
-else:
-  st.error(
-      "Kon geen weerdata ophalen. Controleer je internetverbinding of API-limiet."
-  )
+    df_daily = pd.DataFrame(daily_rows)
+
+    # Grafiek van maximum temperaturen (overeenkomstig met de foto)
+    st.line_chart(pd.Series(chart_data))
+
+    # Overzichtstabel met alle 14 dagen
+    st.dataframe(df_daily, use_container_width=True, hide_index=True)
+  else:
+    st.info("Geen 14-daagse verwachting beschikbaar.")
