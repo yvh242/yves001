@@ -5,23 +5,23 @@ import streamlit as st
 
 # Pagina configuratie
 st.set_page_config(
-    page_title="Streamlit Buienradar & Buienalert", page_icon="🌧️", layout="centered"
+    page_title="Het weer dashboard", page_icon="🌤️", layout="centered"
 )
 
-st.title("🌧️ Buienradar & Buienalert Dashboard")
+st.title("🌤️ Het weer dashboard")
 st.write(
-    "Bekijk direct de neerslagverwachting voor de komende 2 uur en actuele weergegevens via de Buienradar API."
+    "Bekijk de neerslagverwachting voor de komende 2 uur en het actuele weer in België via de Buienradar API."
 )
 
-# Sidebar voor locatie-instellingen (Standaard coördinaten voor België/regio)
+# Sidebar voor locatie-instellingen (Standaard ingesteld op Deinze, BE)
 st.sidebar.header("📍 Locatie Instellingen")
 lat = st.sidebar.number_input(
-    "Breedtegraad (Latitude)", value=51.05, format="%.4f"
+    "Breedtegraad (Latitude)", value=50.9818, format="%.4f"
 )
-lon = st.sidebar.number_input("Lengtegraad (Longitude)", value=3.73, format="%.4f")
-st.sidebar.caption(
-    "Standaard ingesteld op Gent. Pas aan naar wens (bijv. Brussel = 50.85, 4.35)."
+lon = st.sidebar.number_input(
+    "Lengtegraad (Longitude)", value=3.5310, format="%.4f"
 )
+st.sidebar.caption("Standaard ingesteld op 9850 Deinze (50.9818, 3.5310).")
 
 
 # Functie om neerslagdata op te halen (raintext endpoint)
@@ -36,13 +36,7 @@ def fetch_rain_forecast(lat, lon):
         parts = line.split("|")
         if len(parts) == 2:
           rain_val, time_val = parts
-          # Waarde is neerslagintensiteit (mm/uur), formule Buienradar: 10^((val-109)/32) of direct 0 als 000
           try:
-            rain_mm = (
-              float(rain_val) if rain_val != "" else 0.0
-            )  # Eenvoudige parsing
-            # Officiële omrekening van buienradar tekstcode naar mm/u:
-            # Als waarde 0 of leeg is = 0 mm/u. Anders: pow(10, (int(val) - 109) / 32)
             val_int = int(rain_val)
             if val_int <= 0:
               mm_h = 0.0
@@ -82,7 +76,6 @@ with st.spinner("Neerslagradar ophalen..."):
   df_rain = fetch_rain_forecast(lat, lon)
 
 if not df_rain.empty:
-  # Check of er regen wordt verwacht
   max_rain = df_rain["Neerslag (mm/u)"].max()
   if max_rain > 0:
     st.warning(
@@ -91,7 +84,6 @@ if not df_rain.empty:
   else:
     st.success("☀️ Droog: Er wordt de komende 2 uur geen neerslag verwacht.")
 
-  # Grafiek tonen in Streamlit
   st.line_chart(df_rain.set_index("Tijd"))
 
   with st.expander("Bekijk ruwe data (tabel)"):
@@ -103,38 +95,57 @@ else:
 
 st.markdown("---")
 
-# --- SECTIE 2: ACTUEEL WEER (STATIONS) ---
-st.subheader("🌡️ Actueel Weer (Algemeen Station)")
+# --- SECTIE 2: ACTUEEL WEER (BELGISCHE STATIONS) ---
+st.subheader("🌡️ Actueel Weer in België")
 
 weather_json = fetch_weather_data()
 if weather_json and "actual" in weather_json:
   stations = weather_json["actual"]["stationmeasurements"]
-  # Kies het eerste station of zoek naar een specifiek station (bv. Melle/Zaventem)
-  # Voor het gemak tonen we de eerste 5 stations of een selectie
-  station_namen = [s["stationname"] for s in stations]
+
+  # Filter specifiek op Belgische stations (country == 'BE') of op naam
+  belgian_stations = [
+      s for s in stations if s.get("country", "").upper() == "BE"
+  ]
+
+  # Als fallback alle stations tonen als de 'country' tag ontbreekt
+  active_station_list = belgian_stations if belgian_stations else stations
+
+  station_namen = [s["stationname"] for s in active_station_list]
+
+  # Zoekbalk/selectie box specifiek voor Belgische meetstations (met automatische sortering)
+  station_namen.sort()
+
+  # Zet standaard selectie op 'Melle' of 'Gent' als deze in de lijst staat, anders de eerste
+  default_idx = 0
+  for idx, name in enumerate(station_namen):
+    if "melle" in name.lower() or "gent" in name.lower():
+      default_idx = idx
+      break
 
   selected_station_name = st.selectbox(
-    "Kies een meetstation", station_namen, index=0
+      "Zoek of kies een meetstation in België",
+      station_namen,
+      index=default_idx,
   )
 
-  # Vind data van gekozen station
+  # Data van gekozen station ophalen
   station_data = next(
-    s for s in stations if s["stationname"] == selected_station_name
+      s for s in active_station_list if s["stationname"] == selected_station_name
   )
 
   col1, col2, col3, col4 = st.columns(4)
   col1.metric("Temperatuur", f"{station_data.get('temperature', 'N/B')} °C")
   col2.metric(
-    "Gevoelstemperatuur", f"{station_data.get('feeltemperature', 'N/B')} °C"
+      "Gevoelstemperatuur", f"{station_data.get('feeltemperature', 'N/B')} °C"
   )
   col3.metric(
-    "Luchtvochtigheid", f"{station_data.get('humidity', 'N/B')}%"
+      "Luchtvochtigheid", f"{station_data.get('humidity', 'N/B')}%"
   )
   col4.metric(
-    "Windkracht", f"{station_data.get('windforce', 'N/B')} Bft"
+      "Windkracht", f"{station_data.get('windforce', 'N/B')} Bft"
   )
 
   st.caption(
-    f"Laatst gemeten op: {station_data.get('measured', 'Onbekend')} | Bron:"
-    " Buienradar.nl"
+      f"Meetstation: {station_data.get('stationname')} | Laatst gemeten op:"
+      f" {station_data.get('measured', 'Onbekend')} | Bron: Buienradar.nl"
   )
