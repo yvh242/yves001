@@ -13,31 +13,55 @@ st.write(
     "Actueel weer, windrichting en een uurlijkse verwachting voor de komende uren."
 )
 
-# Sidebar voor locatie-instellingen met snelle Belgische steden
-st.sidebar.header("📍 Locatie kiezen")
+# --- LOCATIE KEUZE BOVENAAN ---
+st.markdown("### 📍 Locatie")
 
-belgische_steden = {
-    "Deinze (Standaard)": (50.9818, 3.5310),
-    "Gent": (51.0543, 3.7174),
-    "Brussel": (50.8503, 4.3517),
-    "Antwerpen": (51.2194, 4.4025),
-    "Brugge": (51.2093, 3.2247),
-    "Kortrijk": (50.8280, 3.2649),
-    "Hasselt": (50.9304, 5.3378),
-    "Leuven": (50.8798, 4.7005),
-}
+col_zoek1, col_zoek2 = st.columns([3, 1])
 
-gekozen_stad = st.sidebar.selectbox(
-    "Kies een Belgische stad:", list(belgische_steden.keys())
-)
-default_lat, default_lon = belgische_steden[gekozen_stad]
+with col_zoek1:
+  # Vrij invoerveld om automatisch te zoeken
+  ingevoerde_plaats = st.text_input(
+      "Zoek een plaats of gemeente in België",
+      value="Deinze",
+      help="Typ een plaatsnaam en druk op enter of klik op de zoekknop",
+  )
 
-lat = st.sidebar.number_input(
-    "Breedtegraad (Latitude)", value=default_lat, format="%.4f"
-)
-lon = st.sidebar.number_input(
-    "Lengtegraad (Longitude)", value=default_lon, format="%.4f"
-)
+with col_zoek2:
+  st.write("")  # Ruimte uitlijnen
+  st.write("")
+  zoek_trigger = st.button("Zoek locatie", type="primary")
+
+
+# Functie om coördinaten automatisch op te zoeken via Open-Meteo Geocoding API
+@st.cache_data(ttl=3600)
+def zoek_coordinaten(plaatsnaam):
+  url = f"https://geocoding-api.open-meteo.com/v1/search?name={plaatsnaam}&count=1&language=nl&format=json"
+  try:
+    response = requests.get(url, timeout=5)
+    if response.status_code == 200:
+      data = response.json()
+      if "results" in data and len(data["results"]) > 0:
+        res = data["results"][0]
+        return res["latitude"], res["longitude"], res.get("name", plaatsnaam)
+  except Exception:
+    pass
+  return None, None, None
+
+
+# Bepaal actuele coördinaten op basis van invoer
+lat, lon, locatie_naam = zoek_coordinaten(ingevoerde_plaats)
+
+if lat is None or lon is.None:
+  st.warning(
+      f"Kon '{ingevoerde_plaats}' niet vinden. We vallen terug op Deinze."
+  )
+  lat, lon, locatie_naam = (50.9818, 3.5310, "Deinze")
+else:
+  st.success(
+      f"Geselecteerde locatie: **{locatie_naam}** (automatisch gelokaliseerd)"
+  )
+
+st.markdown("---")
 
 
 # Functie om graden om te zetten naar windrichting (kompas)
@@ -93,10 +117,6 @@ def fetch_weather_data(lat, lon):
   return None
 
 
-# Knop om te verversen
-if st.button("🔄 Ververs Weergegevens", type="primary"):
-  st.rerun()
-
 # --- SECTIE 1: 2-UURS NEERSLAGVERWACHTING ---
 st.subheader("⏱️ Neerslagverwachting komende 2 uur")
 
@@ -121,7 +141,7 @@ weather_data = fetch_weather_data(lat, lon)
 
 if weather_data:
   # --- SECTIE 2: ACTUEEL WEER ---
-  st.subheader(f"🌡️ Actueel Weer voor {gekozen_stad.split('(')[0].strip()}")
+  st.subheader(f"🌡️ Actueel Weer voor {locatie_naam}")
   if "current" in weather_data:
     current = weather_data["current"]
     wind_dir_deg = current.get("wind_direction_10m", 0)
@@ -163,7 +183,6 @@ if weather_data:
 
     table_data = []
     for i in range(start_idx, min(end_idx, len(times))):
-      # Format tijd naar enkel uur (bijv. "14:00")
       tijd_formaat = datetime.fromisoformat(times[i]).strftime("%H:%M")
       richting = deg_to_compass(wind_dirs[i])
 
