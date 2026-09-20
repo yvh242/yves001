@@ -10,3 +10,4 @@ streamlit-geolocation
 gpxpy
 folium
 streamlit-folium
+requests
