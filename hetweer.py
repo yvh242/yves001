@@ -212,7 +212,6 @@ with tab2:
         return "☁️ Bewolkt"
 
     daily_rows = []
-    chart_data = {}
 
     for i in range(len(dates)):
       dt = datetime.fromisoformat(dates[i])
@@ -228,14 +227,10 @@ with tab2:
           "Max Temp (°C)": f"{max_temps[i]}°C",
           "Min Temp (°C)": f"{min_temps[i]}°C",
       })
-      chart_data[f"{nl_dag} {datum_str}"] = max_temps[i]
 
     df_daily = pd.DataFrame(daily_rows)
 
-    # Grafiek van maximum temperaturen (overeenkomstig met de foto)
-    st.line_chart(pd.Series(chart_data))
-
-    # Overzichtstabel met alle 14 dagen
+    # Overzichtstabel met alle 14 dagen (grafiek is verwijderd)
     st.dataframe(df_daily, use_container_width=True, hide_index=True)
   else:
     st.info("Geen 14-daagse verwachting beschikbaar.")
