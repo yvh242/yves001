@@ -27,7 +27,7 @@ belgische_steden = {
     "Leuven": (50.8798, 4.7005),
 }
 
- gekozen_stad = st.sidebar.selectbox(
+gekozen_stad = st.sidebar.selectbox(
     "Kies een Belgische stad:", list(belgische_steden.keys())
 )
 default_lat, default_lon = belgische_steden[gekozen_stad]
@@ -67,7 +67,7 @@ def fetch_rain_forecast(lat, lon):
   return pd.DataFrame()
 
 
-# 2. Functie voor actueel weer via Open-Meteo (altijd stabiel in België)
+# 2. Functie voor actueel weer via Open-Meteo
 @st.cache_data(ttl=300)
 def fetch_current_weather(lat, lon):
   url = (
