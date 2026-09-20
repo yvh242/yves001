@@ -134,9 +134,19 @@ tab1, tab2 = st.tabs(["⏱️ Vandaag & Uurlijks", "📅 14-daagse verwachting"]
 weather_data = fetch_weather_data(lat, lon)
 
 with tab1:
-  # Sectie: Neerslag komende 2 uur
+  # Sectie: Neerslag komende 2 uur + Buienradar link
   with st.container(border=True):
-    st.subheader("⏱️ Neerslagverwachting komende 2 uur")
+    col_r1, col_r2 = st.columns([3, 1])
+    with col_r1:
+      st.subheader("⏱️ Neerslagverwachting komende 2 uur")
+    with col_r2:
+      st.markdown(
+          "<div style='text-align: right; padding-top: 5px;'><a"
+          " href='https://www.buienradar.be/' target='_blank'>🔗 Ga naar"
+          " Buienradar.be</a></div>",
+          unsafe_allow_html=True,
+      )
+
     df_rain = fetch_rain_forecast(lat, lon)
     if not df_rain.empty:
       max_rain = df_rain["Neerslag (mm/u)"].max()
