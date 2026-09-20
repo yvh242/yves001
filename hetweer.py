@@ -92,7 +92,7 @@ def fetch_weather_data(lat, lon):
   url = (
       f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
       "&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_direction_10m"
-      "&hourly=temperature_2m,wind_speed_10m,wind_direction_10m"
+      "&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,precipitation"
       "&daily=temperature_2m_max,temperature_2m_min,weathercode"
       "&timezone=auto"
   )
@@ -147,13 +147,16 @@ with tab1:
 
     st.markdown("---")
 
-    st.subheader("📋 Weersverwachting per uur (komende 8 uur)")
+    st.subheader(
+        "📋 Weersverwachting en neerslag per uur (komende 8 uur)"
+    )
     if "hourly" in weather_data:
       hourly = weather_data["hourly"]
       times = hourly.get("time", [])
       temps = hourly.get("temperature_2m", [])
       wind_speeds = hourly.get("wind_speed_10m", [])
       wind_dirs = hourly.get("wind_direction_10m", [])
+      precips = hourly.get("precipitation", [])
 
       now_str = datetime.now().strftime("%Y-%m-%dT%H:00")
       start_idx = 0
@@ -167,9 +170,12 @@ with tab1:
       for i in range(start_idx, min(end_idx, len(times))):
         tijd_formaat = datetime.fromisoformat(times[i]).strftime("%H:%M")
         richting = deg_to_compass(wind_dirs[i])
+        neerslag_val = precips[i] if i < len(precips) else 0.0
+
         table_data.append({
             "Tijd": tijd_formaat,
             "Temperatuur (°C)": f"{temps[i]} °C",
+            "Neerslag (mm)": f"{neerslag_val} mm",
             "Windsnelheid (km/h)": f"{wind_speeds[i]} km/h",
             "Windrichting": f"{richting} ({wind_dirs[i]}°)",
         })
@@ -229,8 +235,6 @@ with tab2:
       })
 
     df_daily = pd.DataFrame(daily_rows)
-
-    # Overzichtstabel met alle 14 dagen (grafiek is verwijderd)
     st.dataframe(df_daily, use_container_width=True, hide_index=True)
   else:
     st.info("Geen 14-daagse verwachting beschikbaar.")
