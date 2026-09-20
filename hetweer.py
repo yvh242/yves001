@@ -51,7 +51,7 @@ def zoek_coordinaten(plaatsnaam):
 # Bepaal actuele coördinaten op basis van invoer
 lat, lon, locatie_naam = zoek_coordinaten(ingevoerde_plaats)
 
-if lat is None or lon is.None:
+if lat is None or lon is None:
   st.warning(
       f"Kon '{ingevoerde_plaats}' niet vinden. We vallen terug op Deinze."
   )
